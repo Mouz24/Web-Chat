@@ -9,7 +9,7 @@ namespace Contracts
 {
     public interface IMessageRepository
     {
-        IEnumerable<Message> GetAllMessages(bool trackChanges);
+        IEnumerable<Message> GetAllMessages(List<string> tags, bool trackChanges);
         void AddMessage(Message message);
     }
 }

@@ -21,9 +21,20 @@ namespace Repository
             Create(message);
         }
 
-        public IEnumerable<Message> GetAllMessages(bool trackChanges) =>
-            FindAll(trackChanges)
-            .OrderBy(m => m.Timestamp)
-            .ToList();
+        public IEnumerable<Message> GetAllMessages(List<string> tags, bool trackChanges)
+        {
+            var query = FindAll(trackChanges).AsEnumerable();
+
+            if (tags != null && tags.Count > 0)
+            {
+                query = query.Where(m => tags.Any(tag => m.Text.Contains($"#{tag}") || !m.Text.Contains("#")));
+            }
+            else
+            {
+                query = query.Where(m => !m.Text.Contains("#"));
+            }
+
+            return query.OrderBy(m => m.Timestamp).ToList();
+        }
     }
 }

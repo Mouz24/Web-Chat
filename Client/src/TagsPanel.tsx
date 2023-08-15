@@ -10,11 +10,12 @@ interface Tag {
 }
 
 interface TagPanelProps {
-  selectedTags: number[];
-  handleTagToggle: (tagId: number) => void;
+  selectedTags: Tag[];
+  handleTagToggle: (tag: Tag) => void;
+  availablTags: Tag[];
 }
 
-const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle }) => {
+const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle, availablTags }) => {
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedAutocompleteTags, setSelectedAutocompleteTags] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -23,7 +24,7 @@ const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle }) =>
 
   useEffect(() => {
     fetchTags();
-  }, []);
+  }, [availablTags]);
 
   const fetchTags = async () => {
     try {
@@ -44,15 +45,13 @@ const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle }) =>
     const tagToAdd = tags.find(tag => tag.text === newTag);
   
     if (tagToAdd && !selectedAutocompleteTags.some(tag => tag.id === tagToAdd.id)) {
-      setSelectedAutocompleteTags(prevTags => [...prevTags, tagToAdd]);
-      handleTagToggle(tagToAdd.id);
+      handleTagToggle(tagToAdd);
     } else {
       try {
         const response = await axios.post('http://peabody28.com:1030/api/tags', { text: newTag });
         const newTagFromApi = response.data;
         setTags(prevTags => [...prevTags, newTagFromApi]);
-        setSelectedAutocompleteTags(prevTags => [...prevTags, newTagFromApi]);
-        handleTagToggle(newTagFromApi.id);
+        handleTagToggle(newTagFromApi);
       } catch (error) {
         console.error('Error adding tag:', error);
       }
@@ -62,8 +61,7 @@ const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle }) =>
   };  
 
   const handleTagDelete = (deletedTag: Tag) => {
-    setSelectedAutocompleteTags(prevTags => prevTags.filter(tag => tag !== deletedTag));
-    handleTagToggle(deletedTag.id);
+    handleTagToggle(deletedTag);
   };
 
   return (
@@ -101,7 +99,7 @@ const TagPanel: React.FC<TagPanelProps> = ({ selectedTags, handleTagToggle }) =>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px'}}>
-          {selectedAutocompleteTags.map((tag) => (
+          {selectedTags.map((tag) => (
             <Chip
               key={tag.id}
               label={tag.text}

@@ -22,35 +22,20 @@ namespace Chat.Controllers
         }
 
         [HttpGet]
-        public IActionResult GetMessages([FromQuery] List<int> ids)
+        public IActionResult GetMessages([FromQuery] List<int> tagIds)
         {
-            var messagesWithTags = _repositoryManager.MessageWithTags.GetMessages(ids, false);
+            var tagList = new List<string>();
 
-            return Ok(messagesWithTags);
-        }
-
-        [HttpPost(Name = "AddTagsToMessage")]
-        public async Task<IActionResult> AddMessage(MessageToAddDTO messageToAdd)
-        {
-            var message = _mapper.Map<Message>(messageToAdd);
-
-            _repositoryManager.Message.AddMessage(message);
-
-            if (messageToAdd.Ids.Count == 0)
-            {
-                _repositoryManager.MessageWithTags.CreateMessageWithoutTags(message.Id);
-            }
-
-            foreach (var tagId in messageToAdd.Ids)
+            foreach (var tagId in tagIds)
             {
                 var tag = _repositoryManager.Tag.FindTagById(tagId, false);
 
-                _repositoryManager.MessageWithTags.AttachTagsToMessage(message.Id, tag);
+                tagList.Add(tag.Text);
             }
 
-            await _repositoryManager.SaveAsync();
+            var messagesWithTags = _repositoryManager.Message.GetAllMessages(tagList, false);
 
-            return CreatedAtRoute("AddTagsToMessage", message);
+            return Ok(messagesWithTags);
         }
     }
 }

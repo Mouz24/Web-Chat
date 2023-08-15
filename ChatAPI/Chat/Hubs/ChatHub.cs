@@ -29,18 +29,6 @@ namespace Chat.Hubs
 
             _repositoryManager.Message.AddMessage(message);
 
-            if (messageToAdd.Ids.Count == 0)
-            {
-                _repositoryManager.MessageWithTags.CreateMessageWithoutTags(message.Id);
-            }
-
-            foreach (var tagId in messageToAdd.Ids)
-            {
-                var tag = _repositoryManager.Tag.FindTagById(tagId, false);
-
-                _repositoryManager.MessageWithTags.AttachTagsToMessage(message.Id, tag);
-            }
-
             await _repositoryManager.SaveAsync();
 
             await Clients.All.SendAsync("ReceiveMessage", message);

@@ -53,25 +53,50 @@ namespace Repository
 
         public IEnumerable<MessageWithTagsDTO> GetMessages(List<int> tagIds, bool trackChanges)
         {
-            var messagesWithTags = FindByCondition(m => tagIds.Count == 0 || tagIds.Contains((int)m.TagId) || m.TagId == null, trackChanges)
-                .Include(m => m.message)
-                .Include(m => m.tag)
-                .ToList();
+            if (tagIds.Count == 0)
+            {
+                var messagesWithNoTags = FindByCondition(m => m.TagId == null, trackChanges)
+                    .Include(m => m.message)
+                    .ToList();
 
-            var groupedMessages = messagesWithTags
-                .GroupBy(mt => mt.MessageId)
-                .Select(group => new MessageWithTagsDTO
-                {
-                    Id = group.First().Id,
-                    MessageId = group.Key,
-                    message = group.First().message,
-                    tag = group.Select(g => g.tag).ToList()
-                })
-                .GroupBy(dto => dto.MessageId)
-                .Select(group => group.First())
-                .OrderBy(m => m.message.Timestamp);
+                var groupedMessages = messagesWithNoTags
+                    .GroupBy(mt => mt.MessageId)
+                    .Select(group => new MessageWithTagsDTO
+                    {
+                        Id = group.First().Id,
+                        MessageId = group.Key,
+                        message = group.First().message,
+                        tag = group.Select(g => g.tag).ToList()
+                    })
+                    .GroupBy(dto => dto.MessageId)
+                    .Select(group => group.First())
+                    .OrderBy(m => m.message.Timestamp);
 
-            return groupedMessages;
+                return groupedMessages;
+            }
+            else
+            {
+                var messagesWithTags = FindByCondition(m => tagIds.Contains((int)m.TagId), trackChanges)
+                    .Include(m => m.message)
+                    .Include(m => m.tag)
+                    .ToList();
+
+                var groupedMessages = messagesWithTags
+                    .GroupBy(mt => mt.MessageId)
+                    .Select(group => new MessageWithTagsDTO
+                    {
+                        Id = group.First().Id,
+                        MessageId = group.Key,
+                        message = group.First().message,
+                        tag = group.Select(g => g.tag).ToList()
+                    })
+                    .GroupBy(dto => dto.MessageId)
+                    .Select(group => group.First())
+                    .OrderBy(m => m.message.Timestamp);
+
+                return groupedMessages;
+            }
         }
+
     }
 }

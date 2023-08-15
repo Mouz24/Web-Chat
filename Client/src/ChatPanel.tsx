@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import TagPanel from './TagsPanel';
 import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-import { Alert, AlertTitle, Box, Button, Container, Grid, Input, Paper, TextField, TextareaAutosize } from '@mui/material';
+import { Alert, AlertTitle, Autocomplete, Box, Button, Container, Grid, Input, Paper, TextField, TextareaAutosize } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import './ChatPanel.css';
 import {v4 as uuidv4} from 'uuid';
@@ -32,15 +32,16 @@ interface MessageWithTagsDTO {
 }
 
 const ChatWindow: React.FC = () => {
-  const [messages, setMessages] = useState<MessageWithTagsDTO[]>([]);
-  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [hubConnection, setHubConnection] = useState<HubConnection>();
   const [showAlert, setShowAlert] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [user, SetUser] = useState(false);
-
+  const [showTagList, setShowTagList] = useState(false);
+  
   useEffect(() => {
     const storedUserId = localStorage.getItem('chatUserId');
     if (storedUserId) {
@@ -53,8 +54,8 @@ const ChatWindow: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchMessages();
     fetchTags();
+    fetchMessages();
 
     const hubConnection = new HubConnectionBuilder()
       .withUrl('http://peabody28.com:1030/api')
@@ -62,7 +63,8 @@ const ChatWindow: React.FC = () => {
       .build();
 
       hubConnection.on('ReceiveMessage', (message) => {
-        fetchMessages()
+        fetchTags();
+        fetchMessages();
       });
   
     hubConnection
@@ -78,15 +80,9 @@ const ChatWindow: React.FC = () => {
 
   const fetchMessages = async () => {
     try {
-      let response;
-
-      if (selectedTags.length === 0) {
-        response = await axios.get<MessageWithTagsDTO[]>('http://peabody28.com:1030/api/messages');
-      } else {
-        const idsQueryParam = selectedTags.map(tag => `ids=${tag}`).join('&');
-        response = await axios.get<MessageWithTagsDTO[]>(`http://peabody28.com:1030/api/messages?${idsQueryParam}`);
-      }
-
+      const idsQueryParam = selectedTags.map(tag => `tagids=${tag.id}`).join('&');
+      const response = await axios.get<Message[]>(`http://peabody28.com:1030/api/messages?${idsQueryParam}`);
+      
       setMessages(response.data);
       console.log(messages);
     } catch (error) {
@@ -103,13 +99,14 @@ const ChatWindow: React.FC = () => {
     }
   };
 
-  const handleTagToggle = (tagId: number) => {
-    if (selectedTags.includes(tagId)) {
-      setSelectedTags(selectedTags.filter((id) => id !== tagId));
+  const handleTagToggle = (tag: Tag) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter((id) => id !== tag));
     } else {
-      setSelectedTags([...selectedTags, tagId]);
+      setSelectedTags([...selectedTags, tag]);
     }
-    fetchTags();
+
+    setShowTagList(false);
   };
 
   const handleSendMessage = async () => {
@@ -117,18 +114,44 @@ const ChatWindow: React.FC = () => {
       setShowAlert(true);
       return;
     }
-
+  
     try {
+      const tagsInMessage = newMessage.match(/#(\w+)/g) || [];
+      
+      const newTags = tagsInMessage
+        .filter(tag => !availableTags.some(existingTag => existingTag.text === tag.substring(1)))
+        .map(tag => tag.substring(1));
+  
+      for (const newTagText of newTags) {
+        try {
+          const response = await axios.post<Tag>('http://peabody28.com:1030/api/tags', { text: newTagText });
+          const newTag = response.data;
+  
+          setAvailableTags(prevTags => [...prevTags, newTag]);
+        } catch (error) {
+          console.error(`Error creating new tag "${newTagText}":`, error);
+        }
+      }
       await hubConnection?.invoke('SendMessage', {
         Text: newMessage,
-        Ids: selectedTags,
         SenderId: userId
       });
-
+  
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
     }
+  };
+  
+
+  const handleTagInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const message = event.target.value;
+    setShowTagList(message.endsWith("#"));
+    setNewMessage(message);
+  };
+
+  const handleTagAppend = async (tagText: string) => {
+    setNewMessage(newMessage + `${tagText}`);
   };
 
   return (
@@ -136,63 +159,68 @@ const ChatWindow: React.FC = () => {
       <Grid container spacing={3}>
         <Grid item xs={4}>
           <Paper elevation={3} className="tag-panel">
-            <TagPanel selectedTags={selectedTags} handleTagToggle={handleTagToggle} />
+            <TagPanel selectedTags={selectedTags} handleTagToggle={handleTagToggle} availablTags={availableTags} />
           </Paper>
         </Grid>
         <Grid item xs={8}>
           <Paper elevation={3} className="message-list">
             {messages.map((message) => (
               <div key={message.id} 
-              className={`message ${message.message.senderId === userId ? 'sent' : 'received'}`}>
-                {message.message && message.message.text && (
-                  <p>{message.message.text}</p>
+              className={`message ${message.senderId === userId ? 'sent' : 'received'}`}>
+                {message && message.text && (
+                  <p>{message.text}</p>
                 )}
-                {message.message && message.message.timestamp && (
+                {message && message.timestamp && (
                   <p className="timestamp">
-                    {new Date(message.message.timestamp).toLocaleString('en-US', {
+                    {new Date(message.timestamp).toLocaleString('en-US', {
                       hour: '2-digit',
                       minute: '2-digit'
                     })}
                   </p>
                 )}
-                {message.tag && message.tag.length > 0 && (
-                  <div className="tags">
-                    {message.tag.map((tag) => (
-                     tag && tag.text ? (
-                      <div key={tag.id} className="tag">
-                        {`#${tag.text}`}
-                      </div>
-                    ) : null
-                  ))}
-                  </div>
-                )}
+                
               </div>
             ))}
           </Paper>
-          <Paper elevation={3} className="message-input">
-          <TextareaAutosize
+          <Paper elevation={3} className="message-input" style={{background: '#f8bbd0'}}>
+          <TextField
+            multiline
             minRows={1}
             maxRows={6}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            style={{
-              width: '100%',
+            sx={{
               backgroundColor: '#f7f7f7',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '5px',
+              borderRadius: '15px',
               fontFamily: 'Helvetica, Arial, sans-serif',
               fontSize: '14px',
-              lineHeight: '1.5',
-              resize: 'none',
+              lineHeight: '1.3',
               outline: 'none',
+              border: 'none',
+              width: '100%',
             }}
+            placeholder="Type a message..."
+            fullWidth
+            value={newMessage}
+            onChange={handleTagInput}
           />
             <Button variant="contained" size='small' endIcon={<SendIcon/>} onClick={handleSendMessage} sx={{fontFamily: 'cursive'}}>
               Send
             </Button>
           </Paper>
+          {showTagList && (
+          <Paper elevation={3} className="tag-list">
+            {availableTags.map((tag) => (
+              <Button
+                key={tag.id}
+                onClick={() => handleTagAppend(tag.text)}
+                variant='outlined'
+                sx={{ margin: '5px' }}
+              >
+                {tag.text}
+              </Button>
+            ))}
+          </Paper>
+        )}
+
         </Grid>
       </Grid>
       {showAlert && (
